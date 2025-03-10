@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Camera Capture & Auto Upload</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+            background: linear-gradient(135deg, #721a46, #52a19d);
+        }
+        h1 {
+            font-size: 40px;
+            font-family: Arial, Helvetica, sans-serif;
+            background: linear-gradient(to right, #f32170, #ff6b08, #cf23cf, #eedd44);
+            -webkit-text-fill-color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+        video {
+            width: 100%;
+            max-width: 500px;
+            margin: 10px 0;
+            border-radius: 15px;
+        }
+        button {
+            padding: 20px 30px;
+            font-size: 20px;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 50px;
+            background: linear-gradient(135deg, #8e44ad, #fd03a2);
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>TECHASCOPE 1.0</h1>
+
+    <!-- Live Video Stream -->
+    <video id="video" autoplay></video>
+
+    <br>
+    <!-- Record button -->
+    <button id="capturePhoto" type="button" class="cool-button">RECORD</button>
+
+    <br>
+    <p id="serverResponse"></p> <!-- Server response display -->
+
+    <script>
+        const video = document.getElementById('video');
+        const capturePhotoBtn = document.getElementById('capturePhoto');
+        const serverResponse = document.getElementById('serverResponse');
+        const canvas = document.createElement('canvas'); // Hidden canvas for capturing
+
+        let mediaStream = null; // Ensure this is globally retained
+        let photoCount = 0;
+        let isCapturing = false; // Prevent multiple clicks from overlapping sessions
+
+        // Start the camera once when the page loads
+        async function startCamera() {
+            try {
+                console.log("Requesting camera access...");
+                mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = mediaStream;
+                console.log("Camera initialized successfully");
+            } catch (error) {
+                console.error("Error accessing camera:", error);
+                alert('Error accessing camera: ' + error.message);
+            }
+        }
+
+        // Capture a photo and upload it
+        async function captureAndUploadPhoto(photoNumber) {
+            console.log(`Capturing photo ${photoNumber}...`);
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                console.log(`Photo ${photoNumber} captured, uploading...`);
+                sendDataToServer(blob, photoNumber);
+            }, 'image/jpeg', 0.95); // Adjust quality if needed
+        }
+
+        // Send captured data to Flask backend via ngrok
+        async function sendDataToServer(fileBlob, photoNumber) {
+            const formData = new FormData();
+            formData.append('file', fileBlob, `photo_${photoNumber}.jpg`);
+
+            try {
+                // Replace 'https://abc123.ngrok.io' with your actual ngrok URL
+                const response = await fetch('https://abc123.ngrok.io/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                // Ensure response is valid
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                serverResponse.textContent = `Uploaded: photo_${photoNumber}.jpg`;
+            } catch (error) {
+                console.error('Error sending data:', error);
+                serverResponse.textContent = 'Error sending data. Check console.';
+            }
+        }
+
+        // Capture 5 photos sequentially at 2-second intervals without refreshing
+        function captureMultiplePhotos() {
+            if (isCapturing) return; // Prevent multiple overlapping sessions
+            isCapturing = true; 
+            photoCount = 0;
+
+            // Function to take the next photo
+            function takeNextPhoto() {
+                if (photoCount < 5) {
+                    captureAndUploadPhoto(photoCount + 1);
+                    photoCount++;
+
+                    if (photoCount < 5) {
+                        // Set timeout to take next photo after 2 seconds
+                        setTimeout(takeNextPhoto, 2000); // No parentheses here - pass function reference!
+                    } else {
+                        isCapturing = false; // Reset capturing state when done
+                    }
+                }
+            }
+            takeNextPhoto(); // Start taking the first photo
+        }
+
+        // Start capturing when button is clicked
+        capturePhotoBtn.addEventListener('click', captureMultiplePhotos);
+
+        // Start the camera when the page loads
+        startCamera();
+    </script>
+
+</body>
+</html>
